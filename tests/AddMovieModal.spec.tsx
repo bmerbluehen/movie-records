@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AddMovieModal } from "../src/components/AddMovieModal";
-import type { Watch } from "../src/interfaces/watch";
+// no types needed from watch here
+import type { Movie } from "../src/interfaces/movie";
 
 /**
  * These are AI-generated test for the dialog.
@@ -14,7 +15,7 @@ import type { Watch } from "../src/interfaces/watch";
 
 describe("AddMovieModal Component", () => {
     const mockHandleClose = jest.fn();
-    const mockAddMovie = jest.fn();
+    const mockAddMovie: jest.MockedFunction<(m: Movie) => void> = jest.fn();
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -139,20 +140,17 @@ describe("AddMovieModal Component", () => {
 
         // Step 3: Verify addMovie was called with correct structure
         expect(mockAddMovie).toHaveBeenCalledTimes(1);
-        expect(mockAddMovie).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: "test-video-id",
-                title: "",
-                rating: 0,
-                description: "",
-                released: 0,
-                watched: expect.objectContaining({
-                    seen: false,
-                    liked: false,
-                    when: null,
-                }) as Watch,
-            }),
-        );
+        const callArg = mockAddMovie.mock.calls[0][0];
+        expect(callArg.id).toBe("test-video-id");
+        expect(callArg.title).toBe("");
+        expect(callArg.rating).toBe(0);
+        expect(callArg.description).toBe("");
+        expect(callArg.released).toBe(0);
+        expect(callArg.watched).toEqual({
+            seen: false,
+            liked: false,
+            when: null,
+        });
 
         // Step 4: Verify modal close was triggered
         expect(mockHandleClose).toHaveBeenCalledTimes(1);
@@ -247,11 +245,9 @@ describe("AddMovieModal Component", () => {
         userEvent.click(saveButton);
 
         // Should still call addMovie, just with empty id
-        expect(mockAddMovie).toHaveBeenCalledWith(
-            expect.objectContaining({
-                id: "",
-            }),
-        );
+        expect(mockAddMovie).toHaveBeenCalledTimes(1);
+        const emptyCall = mockAddMovie.mock.calls[0][0];
+        expect(emptyCall.id).toBe("");
     });
 
     /**
@@ -302,6 +298,99 @@ describe("AddMovieModal Component", () => {
         // Verify both callbacks were triggered in correct order
         expect(mockAddMovie).toHaveBeenCalled();
         expect(mockHandleClose).toHaveBeenCalled();
+    });
+
+    test("should include songs from EditableSongList when saving", () => {
+        render(
+            <AddMovieModal
+                show={true}
+                handleClose={mockHandleClose}
+                addMovie={mockAddMovie}
+            />,
+        );
+
+        // Click Add Song to create a new song input
+        const addSongBtn = screen.getByRole("button", { name: /Add Song/i });
+        userEvent.click(addSongBtn);
+
+        // There should be a new textbox for the song id (plus the YouTube ID input)
+        const textboxes = screen.getAllByRole("textbox");
+        // Last textbox is the new song input
+        const songInput = textboxes[textboxes.length - 1];
+        userEvent.type(songInput, "spotify:track:abc123");
+
+        // Also set YouTube ID to ensure id field is set
+        const youtubeIdInput = screen.getByLabelText(/YouTube ID/i);
+        userEvent.type(youtubeIdInput, "video-xyz");
+
+        // Save
+        const saveButton = screen.getByRole("button", {
+            name: /save changes/i,
+        });
+        userEvent.click(saveButton);
+
+        // addMovie should be called with soundtrack containing our song id
+        expect(mockAddMovie).toHaveBeenCalledTimes(1);
+        const calledWithSong = mockAddMovie.mock.calls[0][0];
+        const ids = calledWithSong.soundtrack.map((s) => s.id);
+        expect(ids).toContain("spotify:track:abc123");
+        // handleClose should also be called
+        expect(mockHandleClose).toHaveBeenCalledTimes(1);
+    });
+
+    test("should map multiple songs into soundtrack when saving", () => {
+        render(
+            <AddMovieModal
+                show={true}
+                handleClose={mockHandleClose}
+                addMovie={mockAddMovie}
+            />,
+        );
+
+        // Add two songs
+        const addSongBtn = screen.getByRole("button", { name: /Add Song/i });
+        userEvent.click(addSongBtn);
+        userEvent.click(addSongBtn);
+
+        // There should be multiple textboxes; fill the last two
+        const textboxes = screen.getAllByRole("textbox");
+        const songInput1 = textboxes[textboxes.length - 2];
+        const songInput2 = textboxes[textboxes.length - 1];
+        userEvent.type(songInput1, "spotify:track:111");
+        userEvent.type(songInput2, "spotify:track:222");
+
+        // Also set YouTube ID
+        const youtubeIdInput = screen.getByLabelText(/YouTube ID/i);
+        userEvent.type(youtubeIdInput, "multi-video");
+
+        // Save
+        const saveButton = screen.getByRole("button", {
+            name: /save changes/i,
+        });
+        userEvent.click(saveButton);
+
+        // Expect addMovie called with both soundtrack entries
+        expect(mockAddMovie).toHaveBeenCalledTimes(1);
+        const calledMulti = mockAddMovie.mock.calls[0][0];
+        const idsMulti = calledMulti.soundtrack.map((s) => s.id);
+        expect(idsMulti).toEqual(
+            expect.arrayContaining(["spotify:track:111", "spotify:track:222"]),
+        );
+    });
+
+    test("header close button calls handleClose", () => {
+        render(
+            <AddMovieModal
+                show={true}
+                handleClose={mockHandleClose}
+                addMovie={mockAddMovie}
+            />,
+        );
+
+        // The header close button is rendered with aria-label="Close"
+        const headerClose = screen.getByLabelText("Close");
+        userEvent.click(headerClose);
+        expect(mockHandleClose).toHaveBeenCalledTimes(1);
     });
 
     /**
