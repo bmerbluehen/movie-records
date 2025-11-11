@@ -16,7 +16,7 @@ describe("MovieEditor edge cases", () => {
         };
 
         const mockChange = jest.fn();
-        const mockEdit = jest.fn();
+        const mockEdit = jest.fn<void, [string, Movie]>();
         const mockDelete = jest.fn();
 
         render(
